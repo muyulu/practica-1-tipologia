@@ -1,0 +1,212 @@
+# Load libraries
+
+import pandas as pd
+import requests
+import math
+import time
+import plotly.express as px
+from bs4 import BeautifulSoup
+
+# function earthquakes
+
+def getEarthquakes(start_date, end_date, min_depth, max_depth, min_mag, max_mag, region, min_intens, max_intens, file_name):
+    
+    # create the URL
+    str_web = ('https://www.emsc-csem.org/Earthquake/?filter=yes' +
+    '&start_date=' + start_date +
+    '&end_date=' + end_date +
+    '&min_depth=' + min_depth +
+    '&max_depth=' + max_depth +
+    '&min_mag=' + min_mag +
+    '&max_mag=' + max_mag +
+    '&region=' + region +
+    '&min_intens=' + min_intens +
+    '&max_intens=' + max_intens)
+    
+    # User Agent
+    headers = {
+    "Accept": "/",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "es-MX,es;q=0.8,en-US;q=0.5,en;q=0.3",
+    "Cache-Control": "max-age=0",
+    "DNT": "1",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:81.0) Gecko/20100101 Firefox/81.0"
+    }
+    
+    page = requests.get(str_web + '&view=1', headers=headers)
+    #print(str_web + '&view=1')
+    soup = BeautifulSoup(page.content)
+
+    # check for results
+    no_results_found = soup.body.findAll(text='No results found')
+
+    if len(no_results_found) == 1:
+
+        print('No results found')
+
+    else:
+
+        # look for the number of results for the selected input
+        results_found = soup.body.find(id='content')
+        results_found = results_found.findAll('tr')[18].td.text.split(' ')[3].strip()
+        print('results found: ' + results_found, '\n')
+
+        i = math.ceil(int(results_found) / 20)
+        print('number of loops: ' + str(i), '\n')
+
+        earthquake_list = []
+        earthquake_id_comp = 0
+
+        # loop through pages
+        for j in range(i):
+
+            t0 = time.time() #
+            
+            print('loop number: ' + str(j + 1))
+
+            # get html from page n
+            page = requests.get(str_web + '&view=' + str(j + 1))
+
+            response_delay = time.time() -t0 #
+            
+            # BeautifulSoup content
+            soup = BeautifulSoup(page.content)
+
+            # look for earthquakes list in html
+            results_list = soup.find(id='tbody')
+            earthquakes = results_list.find_all('tr', class_=lambda x: x != 'autour' and x != 'black')
+
+            # print number of earthquakes found
+            if j == 0:
+                print('found: ' + str(len(earthquakes)), '\n')
+            else:
+                print('found: ' + str(len(earthquakes)-1), '\n')
+
+            # loop through earthquakes in every page
+            for earthquake in earthquakes:
+
+                # save all earthquakes' children
+                children = earthquake.findChildren('td')
+
+                # parameter earthquake id
+                earthquake_id = earthquake['id']
+
+                # declare array to save latitude, longitude and magnitude
+                lat_lon = []
+
+                # remove duplicates from each page greater than 1
+                if earthquake_id_comp != earthquake_id:
+
+                    # loop through values of each earthquake
+                    for child in children:
+
+                        # parameter DateTime
+                        if child['class'][0] == 'tabev6':
+                            # replace strange characters and divide it in date and time
+                            dateTime = child.a.text.replace(u'\xa0', u' ').partition('   ')
+
+                            #parameter date
+                            date = dateTime[0]
+
+                            #parameter time
+                            time_utc = dateTime[2]
+
+                        # parameters latitude and longitude (numeric)
+                        if child['class'][0] == 'tabev1':
+                            lat_lon.append(child.text)
+
+                        # parameters latitude, longitude (cardinal direction) and magnitude
+                        if child['class'][0] == 'tabev2':
+                            lat_lon.append(child.text)
+
+                        # parameter depth
+                        if child['class'][0] == 'tabev3':
+                            depth = child.text
+
+                        # parameter magnitude type
+                        if child['class'][0] == 'tabev5':
+                            magnitude_type = child.text
+
+                        # parameter region
+                        if child['class'][0] == 'tb_region':
+                            region = child.text.strip()
+
+                        # parameter last update
+                        if child['class'][0] == 'comment':
+                            last_update = child.text
+
+                    # remove strange characters from array
+                    lat_lon = [w.replace(u'\xa0', u' ') for w in lat_lon]
+
+                    # parameter latitude
+                    latitude = lat_lon[0].strip()
+
+                    # parameter cardinal direction latitude
+                    latitude_card = lat_lon[1].strip()
+                    
+                    # parameter signed latitude
+                    
+                    if latitude_card == 'S':
+                        signed_lat = -1*float(latitude)
+                    else:
+                        signed_lat = float(latitude)
+                                        
+                    # parameter longitude
+                    longitude = lat_lon[2].strip()
+
+                    # parameter cardinal direction longitude
+                    longitude_card = lat_lon[3].strip()
+                    
+                    # parameter signed longitude
+                    
+                    if longitude_card == 'W':
+                        signed_lon = -1*float(longitude)
+                    else:
+                        signed_lon = float(longitude)
+
+                    # parameter magnitude
+                    magnitude = lat_lon[4].strip()
+
+                    # append parameters in array
+                    earthquake_list.append([
+                         date
+                        ,time_utc
+                        ,latitude
+                        ,latitude_card
+                        ,signed_lat
+                        ,longitude
+                        ,longitude_card
+                        ,signed_lon
+                        ,depth
+                        ,magnitude_type
+                        ,magnitude
+                        ,region
+                        ,last_update
+                        ,earthquake_id
+                    ]) 
+
+                # save earthquake id from previous iteration to look for duplicates
+                earthquake_id_comp = earthquake_id
+                
+                # hold on to avoid server saturation
+                time.sleep(2 * response_delay) #
+        
+        # generate CSV
+        df = pd.DataFrame(earthquake_list)
+        df.to_csv(file_name, sep=';', index=False, header=
+                ['Date'
+                ,'Time UTC'
+                ,'Latitude'
+                ,'Latitude Cardinal'
+                ,'Signed Latitude' 
+                ,'Longitude'
+                ,'Longitude Cardinal'
+                ,'Signed Longitude'
+                ,'Depth'
+                ,'Magnitude Type'
+                ,'Magnitude'
+                ,'Region'
+                ,'Last Update'
+                ,'Earthquake ID'])
