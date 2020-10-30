@@ -1,0 +1,13 @@
+start_date = '2020-08-01'
+end_date = '2020-10-30'
+min_depth = ''
+max_depth = ''
+min_mag = ''
+max_mag = ''
+region = 'BALEARIC+ISLANDS,+SPAIN|CANARY+ISLANDS,+SPAIN+REGION|SPAIN'
+min_intens = ''
+max_intens = ''
+
+file_name = 'earthquakes-spain-aug-oct-2020.csv'
+
+earthquakes(start_date, end_date, min_depth, max_depth, min_mag, max_mag, region, min_intens, max_intens, file_name)
