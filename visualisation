@@ -1,0 +1,13 @@
+file_name = 'earthquakes-spain-aug-oct-2020.csv'
+
+df = pd.read_csv(file_name, sep = ";", engine= "python")
+
+
+fig = px.scatter_geo(df,
+                     lon = df['Signed Longitude'],
+                     lat = df['Signed Latitude'],
+                     hover_data = [df['Region'], df['Signed Longitude'], df['Signed Latitude'], df['Magnitude']], 
+                     size = 2.7**(df['Magnitude']),
+                     projection='orthographic'
+                     )
+fig.show()
